@@ -44,6 +44,52 @@ struct ObjectBuffer {
   int device_num;
 };
 
+class IPlasmaClientImpl{
+ public:
+  virtual Status Connect(const std::string &store_socket_name,
+                 const std::string &manager_socket_name, int release_delay = 0,
+                 int num_retries = -1) = 0;
+
+  virtual Status CreateAndSpillIfNeeded(const ObjectID &object_id,
+                                const ray::rpc::Address &owner_address, int64_t data_size,
+                                const uint8_t *metadata, int64_t metadata_size,
+                                std::shared_ptr<Buffer> *data, plasma::flatbuf::ObjectSource source,
+                                int device_num = 0) = 0;
+
+  virtual Status RetryCreate(const ObjectID &object_id, uint64_t request_id,
+                     const uint8_t *metadata, uint64_t *retry_with_request_id,
+                     std::shared_ptr<Buffer> *data) = 0;
+
+  virtual Status TryCreateImmediately(const ObjectID &object_id,
+                              const ray::rpc::Address &owner_address, int64_t data_size,
+                              const uint8_t *metadata, int64_t metadata_size,
+                              std::shared_ptr<Buffer> *data, plasma::flatbuf::ObjectSource source,
+                              int device_num) = 0;
+
+  virtual Status Get(const std::vector<ObjectID> &object_ids, int64_t timeout_ms,
+             std::vector<ObjectBuffer> *object_buffers, bool is_from_worker) = 0;
+
+  virtual Status Release(const ObjectID &object_id) = 0;
+
+  virtual Status Contains(const ObjectID &object_id, bool *has_object) = 0;
+
+  virtual Status Abort(const ObjectID &object_id) = 0;
+
+  virtual Status Seal(const ObjectID &object_id) = 0;
+
+  virtual Status Delete(const std::vector<ObjectID> &object_ids) = 0;
+
+  virtual Status Evict(int64_t num_bytes, int64_t &num_bytes_evicted) = 0;
+
+  virtual Status Disconnect() = 0;
+
+  virtual std::string DebugString() = 0;
+
+  virtual bool IsInUse(const ObjectID &object_id) = 0;
+
+  virtual int64_t store_capacity() = 0; 
+};
+
 class PlasmaClient {
  public:
   PlasmaClient();
@@ -246,8 +292,8 @@ class PlasmaClient {
   friend class PlasmaMutableBuffer;
   bool IsInUse(const ObjectID &object_id);
 
-  class Impl;
-  std::shared_ptr<Impl> impl_;
+  std::shared_ptr<IPlasmaClientImpl> impl_;
 };
+
 
 }  // namespace plasma
