@@ -18,6 +18,7 @@
 // PLASMA CLIENT: Client library for using the plasma store and manager
 
 #include "ray/object_manager/plasma/client.h"
+#include "ray/object_manager/plasma/vineyard_client_impl.h"
 
 #include <cstring>
 
@@ -47,41 +48,6 @@ namespace plasma {
 using fb::MessageType;
 using fb::PlasmaError;
 
-class PlasmaClientImpl;
-
-// ----------------------------------------------------------------------
-// PlasmaBuffer
-
-/// A Buffer class that automatically releases the backing plasma object
-/// when it goes out of scope. This is returned by Get.
-class PlasmaBuffer : public SharedMemoryBuffer {
- public:
-  ~PlasmaBuffer();
-
-  PlasmaBuffer(std::shared_ptr<PlasmaClientImpl> client, const ObjectID &object_id,
-               const std::shared_ptr<Buffer> &buffer)
-      : SharedMemoryBuffer(buffer, 0, buffer->Size()),
-        client_(client),
-        object_id_(object_id) {}
-
- private:
-  std::shared_ptr<PlasmaClientImpl> client_;
-  ObjectID object_id_;
-};
-
-/// A mutable Buffer class that keeps the backing data alive by keeping a
-/// PlasmaClient shared pointer. This is returned by Create. Release will
-/// be called in the associated Seal call.
-class RAY_NO_EXPORT PlasmaMutableBuffer : public SharedMemoryBuffer {
- public:
-  PlasmaMutableBuffer(std::shared_ptr<PlasmaClientImpl> client, uint8_t *mutable_data,
-                      int64_t data_size)
-      : SharedMemoryBuffer(mutable_data, data_size), client_(client) {}
-
- private:
-  std::shared_ptr<PlasmaClientImpl> client_;
-};
-
 // ----------------------------------------------------------------------
 // PlasmaClientImpl
 
@@ -105,7 +71,7 @@ class PlasmaClientImpl : public IPlasmaClientImpl,
   PlasmaClientImpl();
   ~PlasmaClientImpl();
 
-  // PlasmaClient method implementations
+  // IPlasmaClientImpl method implementations
 
   Status Connect(const std::string &store_socket_name,
                  const std::string &manager_socket_name, int release_delay = 0,
@@ -119,7 +85,7 @@ class PlasmaClientImpl : public IPlasmaClientImpl,
 
   Status RetryCreate(const ObjectID &object_id, uint64_t request_id,
                      const uint8_t *metadata, uint64_t *retry_with_request_id,
-                     std::shared_ptr<Buffer> *data) override;
+                     std::shared_ptr<Buffer> *data);
 
   Status TryCreateImmediately(const ObjectID &object_id,
                               const ray::rpc::Address &owner_address, int64_t data_size,
@@ -340,6 +306,7 @@ Status PlasmaClientImpl::CreateAndSpillIfNeeded(
 
   RAY_LOG(DEBUG) << "called plasma_create on conn " << store_conn_ << " with size "
                  << data_size << " and metadata size " << metadata_size;
+  RAY_LOG(INFO) << " MENGKE: metadata size when Create: " << metadata_size;
   RAY_RETURN_NOT_OK(SendCreateRequest(store_conn_, object_id, owner_address, data_size,
                                       metadata_size, source, device_num,
                                       /*try_immediately=*/false));
@@ -388,15 +355,18 @@ Status PlasmaClientImpl::GetBuffers(
     const std::function<std::shared_ptr<Buffer>(
         const ObjectID &, const std::shared_ptr<Buffer> &)> &wrap_buffer,
     ObjectBuffer *object_buffers, bool is_from_worker) {
+  RAY_LOG(INFO) << "MENGKE: try to get Buffer ";
   // Fill out the info for the objects that are already in use locally.
   bool all_present = true;
   for (int64_t i = 0; i < num_objects; ++i) {
     auto object_entry = objects_in_use_.find(object_ids[i]);
     if (object_entry == objects_in_use_.end()) {
+      RAY_LOG(INFO) << "MENGKE: GET no in use: ";
       // This object is not currently in use by this client, so we need to send
       // a request to the store.
       all_present = false;
     } else if (!object_entry->second->is_sealed) {
+      RAY_LOG(INFO) << "MENGKE: GET not sealed: ";
       // This client created the object but hasn't sealed it. If we call Get
       // with no timeout, we will deadlock, because this client won't be able to
       // call Seal.
@@ -416,6 +386,7 @@ Status PlasmaClientImpl::GetBuffers(
       } else {
         RAY_LOG(FATAL) << "GPU library is not enabled.";
       }
+
       physical_buf = wrap_buffer(object_ids[i], physical_buf);
       object_buffers[i].data =
           SharedMemoryBuffer::Slice(physical_buf, 0, object->data_size);
@@ -475,6 +446,7 @@ Status PlasmaClientImpl::GetBuffers(
       } else {
         RAY_LOG(FATAL) << "Arrow GPU library is not enabled.";
       }
+      RAY_LOG(INFO) << "MENGKE: metadata size when GET: " << object->metadata_size;
       // Finish filling out the return values.
       physical_buf = wrap_buffer(object_ids[i], physical_buf);
       object_buffers[i].data =
@@ -663,9 +635,10 @@ Status PlasmaClientImpl::Evict(int64_t num_bytes, int64_t &num_bytes_evicted) {
 }
 
 Status PlasmaClientImpl::Connect(const std::string &store_socket_name,
-                                   const std::string &manager_socket_name,
-                                   int release_delay, int num_retries) {
+                                 const std::string &manager_socket_name,
+                                 int release_delay, int num_retries) {
   std::lock_guard<std::recursive_mutex> guard(client_mutex_);
+  RAY_LOG(INFO) << "MENGKE: " << store_socket_name;
 
   /// The local stream socket that connects to store.
   ray::local_stream_socket socket(main_service_);
@@ -711,7 +684,9 @@ std::string PlasmaClientImpl::DebugString() {
 // ----------------------------------------------------------------------
 // PlasmaClient
 
-PlasmaClient::PlasmaClient() : impl_(std::make_shared<PlasmaClientImpl>()) {}
+//SWITCH
+PlasmaClient::PlasmaClient() : impl_(std::make_shared<VineyardClientImpl>()) {}
+//PlasmaClient::PlasmaClient() : impl_(std::make_shared<PlasmaClientImpl>()) {}
 
 PlasmaClient::~PlasmaClient() {}
 

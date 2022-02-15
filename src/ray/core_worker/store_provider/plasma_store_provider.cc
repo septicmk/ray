@@ -113,6 +113,7 @@ Status CoreWorkerPlasmaStoreProvider::Create(const std::shared_ptr<Buffer> &meta
   if (!created_by_worker) {
     source = plasma::flatbuf::ObjectSource::RestoredFromStorage;
   }
+  RAY_LOG(INFO) << "MENGKE: create" << object_id << "in provider metasize"  <<  (metadata ? metadata->Size() : 0) << " data_size :" << data_size ;
   Status status = store_client_.CreateAndSpillIfNeeded(
       object_id, owner_address, data_size, metadata ? metadata->Data() : nullptr,
       metadata ? metadata->Size() : 0, data, source,

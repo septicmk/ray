@@ -44,6 +44,41 @@ struct ObjectBuffer {
   int device_num;
 };
 
+class IPlasmaClientImpl;
+// ----------------------------------------------------------------------
+// PlasmaBuffer
+
+/// A Buffer class that automatically releases the backing plasma object
+/// when it goes out of scope. This is returned by Get.
+class PlasmaBuffer : public SharedMemoryBuffer {
+ public:
+  ~PlasmaBuffer();
+
+  PlasmaBuffer(std::shared_ptr<IPlasmaClientImpl> client, const ObjectID &object_id,
+               const std::shared_ptr<Buffer> &buffer)
+      : SharedMemoryBuffer(buffer, 0, buffer->Size()),
+        client_(client),
+        object_id_(object_id) {}
+
+ private:
+  std::shared_ptr<IPlasmaClientImpl> client_;
+  ObjectID object_id_;
+};
+
+/// A mutable Buffer class that keeps the backing data alive by keeping a
+/// PlasmaClient shared pointer. This is returned by Create. Release will
+/// be called in the associated Seal call.
+class RAY_NO_EXPORT PlasmaMutableBuffer : public SharedMemoryBuffer {
+ public:
+  PlasmaMutableBuffer(std::shared_ptr<IPlasmaClientImpl> client, uint8_t *mutable_data,
+                      int64_t data_size)
+      : SharedMemoryBuffer(mutable_data, data_size), client_(client) {}
+
+ private:
+  std::shared_ptr<IPlasmaClientImpl> client_;
+};
+
+
 class IPlasmaClientImpl{
  public:
   virtual Status Connect(const std::string &store_socket_name,
@@ -55,10 +90,6 @@ class IPlasmaClientImpl{
                                 const uint8_t *metadata, int64_t metadata_size,
                                 std::shared_ptr<Buffer> *data, plasma::flatbuf::ObjectSource source,
                                 int device_num = 0) = 0;
-
-  virtual Status RetryCreate(const ObjectID &object_id, uint64_t request_id,
-                     const uint8_t *metadata, uint64_t *retry_with_request_id,
-                     std::shared_ptr<Buffer> *data) = 0;
 
   virtual Status TryCreateImmediately(const ObjectID &object_id,
                               const ray::rpc::Address &owner_address, int64_t data_size,
