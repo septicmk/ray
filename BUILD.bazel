@@ -296,6 +296,7 @@ cc_library(
     name = "plasma_client",
     srcs = [
         "src/ray/object_manager/plasma/client.cc",
+        "src/ray/object_manager/plasma/vineyard_client_impl.cc",
         "src/ray/object_manager/plasma/connection.cc",
         "src/ray/object_manager/plasma/malloc.cc",
         "src/ray/object_manager/plasma/plasma.cc",
@@ -311,6 +312,7 @@ cc_library(
     hdrs = [
         "src/ray/object_manager/common.h",
         "src/ray/object_manager/plasma/client.h",
+        "src/ray/object_manager/plasma/vineyard_client_impl.h",
         "src/ray/object_manager/plasma/common.h",
         "src/ray/object_manager/plasma/compat.h",
         "src/ray/object_manager/plasma/connection.h",
@@ -326,12 +328,12 @@ cc_library(
             "src/ray/object_manager/plasma/fling.h",
         ],
     }),
-    copts = PLASMA_COPTS,
+    copts = PLASMA_COPTS + ["-I/usr/local/include/vineyard"],
     defines = select({
         "@bazel_tools//src/conditions:windows": PROPAGATED_WINDOWS_DEFINES,
         "//conditions:default": [],
     }),
-    linkopts = PLASMA_LINKOPTS,
+    linkopts = PLASMA_LINKOPTS + ["-L/usr/local/lib/", "-lvineyard_client", "-lvineyard_basic"],
     strip_include_prefix = "src",
     deps = [
         ":plasma_fbs",

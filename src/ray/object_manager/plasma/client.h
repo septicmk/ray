@@ -44,6 +44,83 @@ struct ObjectBuffer {
   int device_num;
 };
 
+class IPlasmaClientImpl;
+// ----------------------------------------------------------------------
+// PlasmaBuffer
+
+/// A Buffer class that automatically releases the backing plasma object
+/// when it goes out of scope. This is returned by Get.
+class PlasmaBuffer : public SharedMemoryBuffer {
+ public:
+  ~PlasmaBuffer();
+
+  PlasmaBuffer(std::shared_ptr<IPlasmaClientImpl> client, const ObjectID &object_id,
+               const std::shared_ptr<Buffer> &buffer)
+      : SharedMemoryBuffer(buffer, 0, buffer->Size()),
+        client_(client),
+        object_id_(object_id) {}
+
+ private:
+  std::shared_ptr<IPlasmaClientImpl> client_;
+  ObjectID object_id_;
+};
+
+/// A mutable Buffer class that keeps the backing data alive by keeping a
+/// PlasmaClient shared pointer. This is returned by Create. Release will
+/// be called in the associated Seal call.
+class RAY_NO_EXPORT PlasmaMutableBuffer : public SharedMemoryBuffer {
+ public:
+  PlasmaMutableBuffer(std::shared_ptr<IPlasmaClientImpl> client, uint8_t *mutable_data,
+                      int64_t data_size)
+      : SharedMemoryBuffer(mutable_data, data_size), client_(client) {}
+
+ private:
+  std::shared_ptr<IPlasmaClientImpl> client_;
+};
+
+
+class IPlasmaClientImpl{
+ public:
+  virtual Status Connect(const std::string &store_socket_name,
+                 const std::string &manager_socket_name, int release_delay = 0,
+                 int num_retries = -1) = 0;
+
+  virtual Status CreateAndSpillIfNeeded(const ObjectID &object_id,
+                                const ray::rpc::Address &owner_address, int64_t data_size,
+                                const uint8_t *metadata, int64_t metadata_size,
+                                std::shared_ptr<Buffer> *data, plasma::flatbuf::ObjectSource source,
+                                int device_num = 0) = 0;
+
+  virtual Status TryCreateImmediately(const ObjectID &object_id,
+                              const ray::rpc::Address &owner_address, int64_t data_size,
+                              const uint8_t *metadata, int64_t metadata_size,
+                              std::shared_ptr<Buffer> *data, plasma::flatbuf::ObjectSource source,
+                              int device_num) = 0;
+
+  virtual Status Get(const std::vector<ObjectID> &object_ids, int64_t timeout_ms,
+             std::vector<ObjectBuffer> *object_buffers, bool is_from_worker) = 0;
+
+  virtual Status Release(const ObjectID &object_id) = 0;
+
+  virtual Status Contains(const ObjectID &object_id, bool *has_object) = 0;
+
+  virtual Status Abort(const ObjectID &object_id) = 0;
+
+  virtual Status Seal(const ObjectID &object_id) = 0;
+
+  virtual Status Delete(const std::vector<ObjectID> &object_ids) = 0;
+
+  virtual Status Evict(int64_t num_bytes, int64_t &num_bytes_evicted) = 0;
+
+  virtual Status Disconnect() = 0;
+
+  virtual std::string DebugString() = 0;
+
+  virtual bool IsInUse(const ObjectID &object_id) = 0;
+
+  virtual int64_t store_capacity() = 0; 
+};
+
 class PlasmaClient {
  public:
   PlasmaClient();
@@ -246,8 +323,8 @@ class PlasmaClient {
   friend class PlasmaMutableBuffer;
   bool IsInUse(const ObjectID &object_id);
 
-  class Impl;
-  std::shared_ptr<Impl> impl_;
+  std::shared_ptr<IPlasmaClientImpl> impl_;
 };
+
 
 }  // namespace plasma
