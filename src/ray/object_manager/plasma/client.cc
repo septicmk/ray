@@ -306,7 +306,6 @@ Status PlasmaClientImpl::CreateAndSpillIfNeeded(
 
   RAY_LOG(DEBUG) << "called plasma_create on conn " << store_conn_ << " with size "
                  << data_size << " and metadata size " << metadata_size;
-  RAY_LOG(INFO) << " MENGKE: metadata size when Create: " << metadata_size;
   RAY_RETURN_NOT_OK(SendCreateRequest(store_conn_, object_id, owner_address, data_size,
                                       metadata_size, source, device_num,
                                       /*try_immediately=*/false));
@@ -355,18 +354,15 @@ Status PlasmaClientImpl::GetBuffers(
     const std::function<std::shared_ptr<Buffer>(
         const ObjectID &, const std::shared_ptr<Buffer> &)> &wrap_buffer,
     ObjectBuffer *object_buffers, bool is_from_worker) {
-  RAY_LOG(INFO) << "MENGKE: try to get Buffer ";
   // Fill out the info for the objects that are already in use locally.
   bool all_present = true;
   for (int64_t i = 0; i < num_objects; ++i) {
     auto object_entry = objects_in_use_.find(object_ids[i]);
     if (object_entry == objects_in_use_.end()) {
-      RAY_LOG(INFO) << "MENGKE: GET no in use: ";
       // This object is not currently in use by this client, so we need to send
       // a request to the store.
       all_present = false;
     } else if (!object_entry->second->is_sealed) {
-      RAY_LOG(INFO) << "MENGKE: GET not sealed: ";
       // This client created the object but hasn't sealed it. If we call Get
       // with no timeout, we will deadlock, because this client won't be able to
       // call Seal.
@@ -446,7 +442,6 @@ Status PlasmaClientImpl::GetBuffers(
       } else {
         RAY_LOG(FATAL) << "Arrow GPU library is not enabled.";
       }
-      RAY_LOG(INFO) << "MENGKE: metadata size when GET: " << object->metadata_size;
       // Finish filling out the return values.
       physical_buf = wrap_buffer(object_ids[i], physical_buf);
       object_buffers[i].data =
@@ -638,7 +633,6 @@ Status PlasmaClientImpl::Connect(const std::string &store_socket_name,
                                  const std::string &manager_socket_name,
                                  int release_delay, int num_retries) {
   std::lock_guard<std::recursive_mutex> guard(client_mutex_);
-  RAY_LOG(INFO) << "MENGKE: " << store_socket_name;
 
   /// The local stream socket that connects to store.
   ray::local_stream_socket socket(main_service_);
